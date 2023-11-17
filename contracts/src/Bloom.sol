@@ -29,7 +29,7 @@ contract BloomCore {
 	struct Promote {
 		uint256 profileId;
         uint256 pubId;
-		uint256 rewardPerMirror;
+		uint256 mirrorId;
 		uint256 timestamp;
 	}
 
@@ -85,7 +85,8 @@ contract BloomCore {
     function promote(
         uint256 promotionProfileId,
         uint256 promotionPubId,
-        uint256 promoterId
+        uint256 promoterId,
+		uint256 mirrorId
     ) external onlyOpenAction {
         Promotion storage promotion = promotions[promotionProfileId][
             promotionPubId
@@ -97,6 +98,7 @@ contract BloomCore {
 		Promote memory promoted = Promote(
 			promotionProfileId,
         	promotionPubId,
+			mirrorId,
 			promotion.rewardPerMirror,
 			block.timestamp
 		);
@@ -127,7 +129,20 @@ contract BloomCore {
     }
 
 	function claimRewards(uint256 profileId) external onlyProfileOwner(profileId) {
+		Promote[] storage _promotedPosts = promotedPosts[profileId];
+		require(_promotedPosts.length > 0, "You have nothing to claim");
 
+		for (uint256 i; _promotedPosts.length > i; i++) {
+			Promote storage promote = _promotedPosts[i];
+			
+			// TODO: check if promote.mirrorId still exists
+
+			// User can only claim if the buffer period has passed since the mirror was created
+			if (promote.timestamp + REWARD_BUFFER_PERIOD < block.timestamp) {
+				Promotion memory _promotion = promotions[promote.profileId][promote.pubId];
+				IERC20(_promotion.token).transfer(profileId, _promotion.rewardPerMirror);
+			}
+		}
 	}
 
     // Getters
