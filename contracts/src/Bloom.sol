@@ -16,9 +16,6 @@ contract Bloom {
 
     // TODO: Potentially add transactionExecutor
     struct Promotion {
-        address transactionExecutor;
-        uint256 profileId;
-        uint256 pubId;
         uint256 budget;
         uint256 rewardPerMirror;
         uint256 minFollowers;
@@ -61,17 +58,18 @@ contract Bloom {
         uint256 minFollowers
     ) external payable {
         require(
-            IERC721(lensHubAddress).ownerOf(profileId) == transactionExecutor,
+            IERC721(lensHubAddress).ownerOf(profileId) == msg.sender,
             "You are not the owner of this post"
+        );
+        require(
+            promotions[profileId][pubId].rewardPerMirror == 0,
+            "Promotion already exists"
         );
         require(msg.value == budget, "You need to send the budget amount");
 
-        uint256[] memory promoters = new uint256[](0);
+        uint256[] memory promoters = new uint256[];
 
         promotions[profileId][pubId] = Promotion(
-            msg.sender,
-            profileId,
-            pubId,
             budget,
             rewardPerMirror,
             minFollowers,
