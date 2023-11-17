@@ -31,7 +31,7 @@ contract BloomCore {
     mapping(uint256 profileId => mapping(uint256 pubId => Promotion))
         public promotions;
 
-    address public constant lensHubProxyContract =
+    address public constant lensHubAddress =
         0xC1E77eE73403B8a7478884915aA599932A677870;
 
     function createPromotion(
@@ -44,14 +44,13 @@ contract BloomCore {
         uint256 minFollowers
     ) external onlyOpenAction {
         require(
-            IERC721(lensHubProxyContract).ownerOf(profileId) ==
+            IERC721(lensHubAddress).ownerOf(profileId) ==
                 transactionExecutor,
             "You are not the owner of this post"
         );
 
         IERC20(token).transferFrom(transactionExecutor, address(this), budget);
 
-		// create new empty uint256 array
 		uint256[] memory promoters = new uint256[](0);
 
         promotions[profileId][pubId] = Promotion(
@@ -75,6 +74,32 @@ contract BloomCore {
             promotionPubId
         ];
         // TODO: add follower check
+
+		promotion.promoters.push(promoterId);
+
+		
+    }
+
+	function withdraw(
+        uint256 profileId,
+        uint256 pubId,
+        uint256 amount
+    ) external {
+        require(
+            IERC721(lensHubAddress).ownerOf(profileId) == msg.sender,
+            "Only the profile owner can withdraw"
+        );
+        Promotion storage promotion = promotions[profileId][pubId];
+
+		uint256 availableBudget = promotion.budget - (promotion.promoters.length * promotion.rewardPerMirror);
+
+        require(
+			availableBudget > amount,
+            "Available budget is less than amount"
+        );
+
+        promotion.budget -= amount;
+        IERC20(promotion.token).transfer(msg.sender, amount);
     }
 
     // Getters
