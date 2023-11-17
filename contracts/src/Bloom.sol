@@ -7,8 +7,8 @@ import {IERC721} from "./interfaces/IERC721.sol";
 contract BloomCore {
     address public OPEN_ACTION_CONTRACT;
 
-	// 3 days
-	uint256 constant REWARD_BUFFER_PERIOD = 60 * 60 * 24 * 3;
+    // 3 days
+    uint256 constant REWARD_BUFFER_PERIOD = 60 * 60 * 24 * 3;
 
     constructor(address _openActionContract) {
         OPEN_ACTION_CONTRACT = _openActionContract;
@@ -26,27 +26,30 @@ contract BloomCore {
         uint256[] promoters;
     }
 
-	struct Promote {
-		uint256 profileId;
+    struct Promote {
+        uint256 profileId;
         uint256 pubId;
-		uint256 mirrorId;
-		uint256 timestamp;
-	}
+        uint256 mirrorId;
+        uint256 timestamp;
+    }
 
     modifier onlyOpenAction() {
         require(msg.sender == OPEN_ACTION_CONTRACT);
         _;
     }
 
-	modifier onlyProfileOwner(uint256 profileId) {
-		require(IERC721(lensHubAddress).ownerOf(profileId) == msg.sender, "You are not the profile owner");
-		_;
-	}
+    modifier onlyProfileOwner(uint256 profileId) {
+        require(
+            IERC721(lensHubAddress).ownerOf(profileId) == msg.sender,
+            "You are not the profile owner"
+        );
+        _;
+    }
 
     mapping(uint256 profileId => mapping(uint256 pubId => Promotion))
         public promotions;
 
-	mapping(uint256 profileId => Promote[]) public promotedPosts;
+    mapping(uint256 profileId => Promote[]) public promotedPosts;
 
     address public constant lensHubAddress =
         0xC1E77eE73403B8a7478884915aA599932A677870;
@@ -61,14 +64,13 @@ contract BloomCore {
         uint256 minFollowers
     ) external onlyOpenAction {
         require(
-            IERC721(lensHubAddress).ownerOf(profileId) ==
-                transactionExecutor,
+            IERC721(lensHubAddress).ownerOf(profileId) == transactionExecutor,
             "You are not the owner of this post"
         );
 
         IERC20(token).transferFrom(transactionExecutor, address(this), budget);
 
-		uint256[] memory promoters = new uint256[](0);
+        uint256[] memory promoters = new uint256[](0);
 
         promotions[profileId][pubId] = Promotion(
             transactionExecutor,
@@ -78,7 +80,7 @@ contract BloomCore {
             token,
             rewardPerMirror,
             minFollowers,
-			promoters
+            promoters
         );
     }
 
@@ -86,27 +88,42 @@ contract BloomCore {
         uint256 promotionProfileId,
         uint256 promotionPubId,
         uint256 promoterId,
-		uint256 mirrorId
+        uint256 mirrorId
     ) external onlyOpenAction {
         Promotion storage promotion = promotions[promotionProfileId][
             promotionPubId
         ];
+
         // TODO: add follower check + other necessary checks
 
-		promotion.promoters.push(promoterId);
+        // TODO: check if rewards are still distributed
 
-		Promote memory promoted = Promote(
-			promotionProfileId,
-        	promotionPubId,
-			mirrorId,
-			promotion.rewardPerMirror,
-			block.timestamp
-		);
+        if (
+            promotion.budget ==
+            (promotion.rewardPerMirror * promotion.promoters.length)
+        ) {
+			for (uint256 i; promotion.promoters.length > i; i++) {
+				Promote storage promote = promotedPosts[promotion.promoters[i]][promotionPubId];
+				// TODO check if promote.mirrorId exists
 
-		promotedPosts[promoterId].push(promoted);
+				
+			}
+		}
+
+        promotion.promoters.push(promoterId);
+
+        Promote memory promoted = Promote(
+            promotionProfileId,
+            promotionPubId,
+            mirrorId,
+            promotion.rewardPerMirror,
+            block.timestamp
+        );
+
+        promotedPosts[promoterId].push(promoted);
     }
 
-	function withdraw(
+    function withdraw(
         uint256 profileId,
         uint256 pubId,
         uint256 amount
@@ -117,10 +134,11 @@ contract BloomCore {
         );
         Promotion storage promotion = promotions[profileId][pubId];
 
-		uint256 availableBudget = promotion.budget - (promotion.promoters.length * promotion.rewardPerMirror);
+        uint256 availableBudget = promotion.budget -
+            (promotion.promoters.length * promotion.rewardPerMirror);
 
         require(
-			availableBudget > amount,
+            availableBudget > amount,
             "Available budget is less than amount"
         );
 
@@ -128,22 +146,29 @@ contract BloomCore {
         IERC20(promotion.token).transfer(msg.sender, amount);
     }
 
-	function claimRewards(uint256 profileId) external onlyProfileOwner(profileId) {
-		Promote[] storage _promotedPosts = promotedPosts[profileId];
-		require(_promotedPosts.length > 0, "You have nothing to claim");
+    function claimRewards(
+        uint256 profileId
+    ) external onlyProfileOwner(profileId) {
+        Promote[] storage _promotedPosts = promotedPosts[profileId];
+        require(_promotedPosts.length > 0, "You have nothing to claim");
 
-		for (uint256 i; _promotedPosts.length > i; i++) {
-			Promote storage promote = _promotedPosts[i];
-			
-			// TODO: check if promote.mirrorId still exists
+        for (uint256 i; _promotedPosts.length > i; i++) {
+            Promote storage promote = _promotedPosts[i];
 
-			// User can only claim if the buffer period has passed since the mirror was created
-			if (promote.timestamp + REWARD_BUFFER_PERIOD < block.timestamp) {
-				Promotion memory _promotion = promotions[promote.profileId][promote.pubId];
-				IERC20(_promotion.token).transfer(profileId, _promotion.rewardPerMirror);
-			}
-		}
-	}
+            // TODO: check if promote.mirrorId still exists
+
+            // User can only claim if the buffer period has passed since the mirror was created
+            if (promote.timestamp + REWARD_BUFFER_PERIOD < block.timestamp) {
+                Promotion memory _promotion = promotions[promote.profileId][
+                    promote.pubId
+                ];
+                IERC20(_promotion.token).transfer(
+                    profileId,
+                    _promotion.rewardPerMirror
+                );
+            }
+        }
+    }
 
     // Getters
     function getPromotion(
