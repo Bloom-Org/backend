@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import {IERC20} from "./interfaces/IERC20.sol";
 import {IERC721} from "./interfaces/IERC721.sol";
 
-contract BloomCore {
+contract Bloom {
     address public OPEN_ACTION_CONTRACT;
 
     // 3 days
@@ -20,7 +20,6 @@ contract BloomCore {
         uint256 profileId;
         uint256 pubId;
         uint256 budget;
-        address token;
         uint256 rewardPerMirror;
         uint256 minFollowers;
         uint256[] promoters;
@@ -55,29 +54,25 @@ contract BloomCore {
         0xC1E77eE73403B8a7478884915aA599932A677870;
 
     function createPromotion(
-        address transactionExecutor,
         uint256 profileId,
         uint256 pubId,
         uint256 budget,
-        address token,
         uint256 rewardPerMirror,
         uint256 minFollowers
-    ) external onlyOpenAction {
+    ) external payable {
         require(
             IERC721(lensHubAddress).ownerOf(profileId) == transactionExecutor,
             "You are not the owner of this post"
         );
-
-        IERC20(token).transferFrom(transactionExecutor, address(this), budget);
+        require(msg.value == budget, "You need to send the budget amount");
 
         uint256[] memory promoters = new uint256[](0);
 
         promotions[profileId][pubId] = Promotion(
-            transactionExecutor,
+            msg.sender,
             profileId,
             pubId,
             budget,
-            token,
             rewardPerMirror,
             minFollowers,
             promoters
@@ -102,13 +97,13 @@ contract BloomCore {
             promotion.budget ==
             (promotion.rewardPerMirror * promotion.promoters.length)
         ) {
-			for (uint256 i; promotion.promoters.length > i; i++) {
-				Promote storage promote = promotedPosts[promotion.promoters[i]][promotionPubId];
-				// TODO check if promote.mirrorId exists
-
-				
-			}
-		}
+            for (uint256 i; promotion.promoters.length > i; i++) {
+                Promote storage promote = promotedPosts[promotion.promoters[i]][
+                    promotionPubId
+                ];
+                // TODO check if promote.mirrorId exists
+            }
+        }
 
         promotion.promoters.push(promoterId);
 
@@ -116,7 +111,6 @@ contract BloomCore {
             promotionProfileId,
             promotionPubId,
             mirrorId,
-            promotion.rewardPerMirror,
             block.timestamp
         );
 
@@ -143,7 +137,8 @@ contract BloomCore {
         );
 
         promotion.budget -= amount;
-        IERC20(promotion.token).transfer(msg.sender, amount);
+        (bool sent, bytes memory data) = msg.sender.call{value: amount}("");
+        require(sent, "Failed to send tokens");
     }
 
     function claimRewards(
@@ -162,10 +157,11 @@ contract BloomCore {
                 Promotion memory _promotion = promotions[promote.profileId][
                     promote.pubId
                 ];
-                IERC20(_promotion.token).transfer(
-                    profileId,
-                    _promotion.rewardPerMirror
-                );
+                (bool sent, bytes memory data) = IERC721(lensHubAddress)
+                    .ownerOf(profileId)
+                    .call{value: _promotion.rewardPerMirror}("");
+
+                require(sent, "Failed to send reward");
             }
         }
     }
