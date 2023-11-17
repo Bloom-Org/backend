@@ -171,4 +171,10 @@ contract Bloom {
     ) external view returns (Promotion memory) {
         return promotions[profileId][pubId];
     }
+
+	function getPromotedPosts(
+		uint256 profileId
+	) external view returns (Promote[] memory) {
+		return promotedPosts[profileId];
+	}
 }
