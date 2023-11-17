@@ -7,6 +7,9 @@ import {IERC721} from "./interfaces/IERC721.sol";
 contract BloomCore {
     address public OPEN_ACTION_CONTRACT;
 
+	// 3 days
+	uint256 constant REWARD_BUFFER_PERIOD = 60 * 60 * 24 * 3;
+
     constructor(address _openActionContract) {
         OPEN_ACTION_CONTRACT = _openActionContract;
     }
@@ -23,13 +26,27 @@ contract BloomCore {
         uint256[] promoters;
     }
 
+	struct Promote {
+		uint256 profileId;
+        uint256 pubId;
+		uint256 rewardPerMirror;
+		uint256 timestamp;
+	}
+
     modifier onlyOpenAction() {
         require(msg.sender == OPEN_ACTION_CONTRACT);
         _;
     }
 
+	modifier onlyProfileOwner(uint256 profileId) {
+		require(IERC721(lensHubAddress).ownerOf(profileId) == msg.sender, "You are not the profile owner");
+		_;
+	}
+
     mapping(uint256 profileId => mapping(uint256 pubId => Promotion))
         public promotions;
+
+	mapping(uint256 profileId => Promote[]) public promotedPosts;
 
     address public constant lensHubAddress =
         0xC1E77eE73403B8a7478884915aA599932A677870;
@@ -73,18 +90,25 @@ contract BloomCore {
         Promotion storage promotion = promotions[promotionProfileId][
             promotionPubId
         ];
-        // TODO: add follower check
+        // TODO: add follower check + other necessary checks
 
 		promotion.promoters.push(promoterId);
 
-		
+		Promote memory promoted = Promote(
+			promotionProfileId,
+        	promotionPubId,
+			promotion.rewardPerMirror,
+			block.timestamp
+		);
+
+		promotedPosts[promoterId].push(promoted);
     }
 
 	function withdraw(
         uint256 profileId,
         uint256 pubId,
         uint256 amount
-    ) external {
+    ) external onlyProfileOwner(profileId) {
         require(
             IERC721(lensHubAddress).ownerOf(profileId) == msg.sender,
             "Only the profile owner can withdraw"
@@ -101,6 +125,10 @@ contract BloomCore {
         promotion.budget -= amount;
         IERC20(promotion.token).transfer(msg.sender, amount);
     }
+
+	function claimRewards(uint256 profileId) external onlyProfileOwner(profileId) {
+
+	}
 
     // Getters
     function getPromotion(
