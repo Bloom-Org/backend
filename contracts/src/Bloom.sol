@@ -3,9 +3,12 @@ pragma solidity ^0.8.0;
 
 import {IERC20} from "./interfaces/IERC20.sol";
 import {IERC721} from "./interfaces/IERC721.sol";
+import {ILensHub} from "./interfaces/ILensHub.sol";
 
 contract Bloom {
-    address constant OPEN_ACTION_CONTRACT;
+    address public OPEN_ACTION_CONTRACT;
+    ILensHub public lensHub =
+        ILensHub(0xC1E77eE73403B8a7478884915aA599932A677870);
 
     // 3 days
     uint256 constant REWARD_BUFFER_PERIOD = 60 * 60 * 24 * 3;
@@ -26,6 +29,7 @@ contract Bloom {
         uint256 pubId;
         uint256 mirrorId;
         uint256 timestamp;
+        bool claimed;
     }
 
     modifier onlyOpenAction() {
@@ -61,10 +65,12 @@ contract Bloom {
             promotions[profileId][pubId].rewardPerMirror == 0,
             "Promotion already exists"
         );
-        (bool sent, bytes memory data) = transactionExecutor.call{value: budget}("");
+        (bool sent, bytes memory data) = transactionExecutor.call{
+            value: budget
+        }("");
         require(sent, "Failed to send budget");
 
-        uint256[] memory promoterIds = new uint256[];
+        uint256[] memory promoterIds;
 
         promotions[profileId][pubId] = Promotion(
             budget,
@@ -85,34 +91,30 @@ contract Bloom {
         ];
 
         require(
+            // TODO: Not working (require promoterId NOT in promotion.promoterIds)
             promotion.promoterIds.indexOf(promoterId) == -1,
             "You have already promoted this post"
         );
 
-        // TODO: add follower check + other necessary checks
+        // TODO: add follower check + other necessary checks (not working)
+        require(lensHub.getProfile(promoterId) >= promotion.minFollowers);
 
         if (
-            promotion.budget ==
+            promotion.budget >
             (promotion.rewardPerMirror * promotion.promoterIds.length)
         ) {
-            for (uint256 i; promotion.promoterIds.length > i; i++) {
-                PromotedPost storage promotedPost = promotedPosts[promotion.promoterIds[i]][
-                    promotionPubId
-                ];
-                // TODO check if promote.mirrorId exists
-            }
+            PromotedPost memory promotedPost = PromotedPost(
+                promotionProfileId,
+                promotionPubId,
+                mirrorId,
+                block.timestamp
+            );
+
+            promotion.promoterIds.push(promoterId);
+            promotedPosts[promoterId].push(promotedPost);
+        } else {
+            filterInvalidPromotedPosts(promotionProfileId, promotionPubId);
         }
-
-        promotion.promoterIds.push(promoterId);
-
-        PromotedPost memory promotedPost = PromotedPost(
-            promotionProfileId,
-            promotionPubId,
-            mirrorId,
-            block.timestamp
-        );
-
-        promotedPosts[promoterId].push(promoted);
     }
 
     function withdraw(
@@ -121,6 +123,8 @@ contract Bloom {
         uint256 amount
     ) external onlyProfileOwner(profileId) {
         Promotion storage promotion = promotions[profileId][pubId];
+
+        // TODO:
 
         uint256 availableBudget = promotion.budget -
             (promotion.promoterIds.length * promotion.rewardPerMirror);
@@ -138,24 +142,67 @@ contract Bloom {
     function claimRewards(
         uint256 profileId
     ) external onlyProfileOwner(profileId) {
-        Promote[] storage _promotedPosts = promotedPosts[profileId];
+        PromotedPost[] storage _promotedPosts = promotedPosts[profileId];
         require(_promotedPosts.length > 0, "You have nothing to claim");
 
         for (uint256 i; _promotedPosts.length > i; i++) {
             PromotedPost storage promotedPost = _promotedPosts[i];
 
-            // TODO: check if promote.mirrorId still exists
+            if (
+                !promotedPost.claimed &&
+                lensHub
+                    .getPublication(
+                        promotedPost.profileId,
+                        promotedPost.mirrorId
+                    )
+                    .contentURI ==
+                ""
+            ) {
+                // TODO: check if promote.mirrorId still exists)
+                // User can only claim if the buffer period has passed since the mirror was created
+                if (
+                    promotedPost.timestamp + REWARD_BUFFER_PERIOD <
+                    block.timestamp
+                ) {
+                    Promotion memory _promotion = promotions[
+                        promotedPost.profileId
+                    ][promotedPost.pubId];
+                    (bool sent, bytes memory data) = IERC721(lensHubAddress)
+                        .ownerOf(profileId)
+                        .call{value: _promotion.rewardPerMirror}("");
 
-            // User can only claim if the buffer period has passed since the mirror was created
-            if (promotedPost.timestamp + REWARD_BUFFER_PERIOD < block.timestamp) {
-                Promotion memory _promotion = promotions[promote.profileId][
-                    promote.pubId
-                ];
-                (bool sent, bytes memory data) = IERC721(lensHubAddress)
-                    .ownerOf(profileId)
-                    .call{value: _promotion.rewardPerMirror}("");
+                    require(sent, "Failed to send reward");
 
-                require(sent, "Failed to send reward");
+                    promotedPost.claimed = true;
+                }
+            }
+        }
+    }
+
+    function filterInvalidPromotedPosts(
+        uint256 profileId,
+        uint256 pubId
+    ) external {
+        Promotion storage promotion = promotions[profileId][pubId];
+
+        for (uint265 i; promotion.promoterIds.length > i; i++) {
+            PromotedPost storage promotedPost = promotedPosts[
+                promotion.promoterIds[i]
+            ];
+
+            if (
+                lensHub
+                    .getPublication(
+                        promotedPost.profileId,
+                        promotedPost.mirrorId
+                    )
+                    .contentURI ==
+                "" &&
+                !promotedPost.claimed &&
+                promotedPost.timestamp + REWARD_BUFFER_PERIOD > block.timestamp
+            ) {
+                // TODO: Remove promoterId from promotion.promoterIds
+                // TODO: Remove PromotedPost from promotedPosts[promoterId]
             }
         }
     }
@@ -167,10 +214,4 @@ contract Bloom {
     ) external view returns (Promotion memory) {
         return promotions[profileId][pubId];
     }
-
-	function getPromotedPosts(
-		uint256 profileId
-	) external view returns (Promote[] memory) {
-		return promotedPosts[profileId];
-	}
 }
