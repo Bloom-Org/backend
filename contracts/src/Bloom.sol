@@ -5,7 +5,7 @@ import {IERC20} from "./interfaces/IERC20.sol";
 import {IERC721} from "./interfaces/IERC721.sol";
 
 contract Bloom {
-    address public OPEN_ACTION_CONTRACT;
+    address constant OPEN_ACTION_CONTRACT;
 
     // 3 days
     uint256 constant REWARD_BUFFER_PERIOD = 60 * 60 * 24 * 3;
@@ -14,15 +14,14 @@ contract Bloom {
         OPEN_ACTION_CONTRACT = _openActionContract;
     }
 
-    // TODO: Potentially add transactionExecutor
     struct Promotion {
         uint256 budget;
         uint256 rewardPerMirror;
         uint256 minFollowers;
-        uint256[] promoters;
+        uint256[] promoterIds;
     }
 
-    struct Promote {
+    struct PromotedPost {
         uint256 profileId;
         uint256 pubId;
         uint256 mirrorId;
@@ -45,35 +44,33 @@ contract Bloom {
     mapping(uint256 profileId => mapping(uint256 pubId => Promotion))
         public promotions;
 
-    mapping(uint256 profileId => Promote[]) public promotedPosts;
+    mapping(uint256 profileId => PromotedPost[]) public promotedPosts;
 
     address public constant lensHubAddress =
         0xC1E77eE73403B8a7478884915aA599932A677870;
 
     function createPromotion(
+        address transactionExecutor,
         uint256 profileId,
         uint256 pubId,
         uint256 budget,
         uint256 rewardPerMirror,
         uint256 minFollowers
-    ) external payable {
-        require(
-            IERC721(lensHubAddress).ownerOf(profileId) == msg.sender,
-            "You are not the owner of this post"
-        );
+    ) external payable onlyOpenAction {
         require(
             promotions[profileId][pubId].rewardPerMirror == 0,
             "Promotion already exists"
         );
-        require(msg.value == budget, "You need to send the budget amount");
+        (bool sent, bytes memory data) = transactionExecutor.call{value: budget}("");
+        require(sent, "Failed to send budget");
 
-        uint256[] memory promoters = new uint256[];
+        uint256[] memory promoterIds = new uint256[];
 
         promotions[profileId][pubId] = Promotion(
             budget,
             rewardPerMirror,
             minFollowers,
-            promoters
+            promoterIds
         );
     }
 
@@ -87,25 +84,28 @@ contract Bloom {
             promotionPubId
         ];
 
-        // TODO: add follower check + other necessary checks
+        require(
+            promotion.promoterIds.indexOf(promoterId) == -1,
+            "You have already promoted this post"
+        );
 
-        // TODO: check if rewards are still distributed
+        // TODO: add follower check + other necessary checks
 
         if (
             promotion.budget ==
-            (promotion.rewardPerMirror * promotion.promoters.length)
+            (promotion.rewardPerMirror * promotion.promoterIds.length)
         ) {
-            for (uint256 i; promotion.promoters.length > i; i++) {
-                Promote storage promote = promotedPosts[promotion.promoters[i]][
+            for (uint256 i; promotion.promoterIds.length > i; i++) {
+                PromotedPost storage promotedPost = promotedPosts[promotion.promoterIds[i]][
                     promotionPubId
                 ];
                 // TODO check if promote.mirrorId exists
             }
         }
 
-        promotion.promoters.push(promoterId);
+        promotion.promoterIds.push(promoterId);
 
-        Promote memory promoted = Promote(
+        PromotedPost memory promotedPost = PromotedPost(
             promotionProfileId,
             promotionPubId,
             mirrorId,
@@ -120,17 +120,13 @@ contract Bloom {
         uint256 pubId,
         uint256 amount
     ) external onlyProfileOwner(profileId) {
-        require(
-            IERC721(lensHubAddress).ownerOf(profileId) == msg.sender,
-            "Only the profile owner can withdraw"
-        );
         Promotion storage promotion = promotions[profileId][pubId];
 
         uint256 availableBudget = promotion.budget -
-            (promotion.promoters.length * promotion.rewardPerMirror);
+            (promotion.promoterIds.length * promotion.rewardPerMirror);
 
         require(
-            availableBudget > amount,
+            availableBudget >= amount,
             "Available budget is less than amount"
         );
 
@@ -146,12 +142,12 @@ contract Bloom {
         require(_promotedPosts.length > 0, "You have nothing to claim");
 
         for (uint256 i; _promotedPosts.length > i; i++) {
-            Promote storage promote = _promotedPosts[i];
+            PromotedPost storage promotedPost = _promotedPosts[i];
 
             // TODO: check if promote.mirrorId still exists
 
             // User can only claim if the buffer period has passed since the mirror was created
-            if (promote.timestamp + REWARD_BUFFER_PERIOD < block.timestamp) {
+            if (promotedPost.timestamp + REWARD_BUFFER_PERIOD < block.timestamp) {
                 Promotion memory _promotion = promotions[promote.profileId][
                     promote.pubId
                 ];
