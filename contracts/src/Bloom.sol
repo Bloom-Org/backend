@@ -13,10 +13,9 @@ contract Bloom is FunctionsClient, ConfirmedOwner {
     using FunctionsRequest for FunctionsRequest.Request;
 
     uint32 gasLimit = 300000;
-    bytes32 donID =
-        0x66756e2d706f6c79676f6e2d6d756d6261692d31000000000000000000000000;
+    bytes32 donID = 0x66756e2d706f6c79676f6e2d6d756d6261692d31000000000000000000000000;
     uint64 subscriptionId = 817;
-    string source =
+    string source = 
         "const profileId = args[0];"
         "const followersQuery = await Functions.makeHttpRequest({"
         "url: `https://api-v2-mumbai.lens.dev`,"
@@ -34,8 +33,9 @@ contract Bloom is FunctionsClient, ConfirmedOwner {
         "}`,"
         "},"
         "});"
-        "return Functions.encodeUint256(followersQuery.data.data.profile.stats.followers);";
-
+        "return Functions.encodeUint256(followersQuery.data.data.profile.stats.followers);"
+    ;
+    
     address public OPEN_ACTION_CONTRACT;
     ILensHub public lensHub =
         ILensHub(0xC1E77eE73403B8a7478884915aA599932A677870);
@@ -46,26 +46,7 @@ contract Bloom is FunctionsClient, ConfirmedOwner {
 
     event Response(bytes32 indexed requestId, bytes response, bytes err);
 
-    // Function events
-    event PromotionCreated(
-        uint256 profileId,
-        uint256 pubId,
-        uint256 budget,
-        uint256 rewardPerMirror,
-        uint256 minFollowers,
-        uint256 bufferPeriod
-    );
-
-    event PostPromoted(
-        uint256 profileId,
-        uint256 pubId,
-        uint256 mirrorId,
-        uint256 promoterId
-    );
-
-    constructor(
-        address router
-    ) FunctionsClient(router) ConfirmedOwner(msg.sender) {}
+    constructor(address router) FunctionsClient(router) ConfirmedOwner(msg.sender) {}
 
     struct Promotion {
         uint256 budget;
@@ -95,12 +76,8 @@ contract Bloom is FunctionsClient, ConfirmedOwner {
         _;
     }
 
-    Promotion[] public allPromotions;
-    mapping(uint256 profileId => Promotion[]) promotionsByCreator;
-
-    mapping(uint256 profileId => mapping(uint256 pubId => Promotion))
-        public promotions;
-
+    mapping(uint256 profileId => mapping(uint256 pubId => Promotion)) public promotions;
+    
     mapping(bytes32 => uint256) private promotionProfileIdTmp;
     mapping(bytes32 => uint256) private promotionPubIdTmp;
     mapping(bytes32 => uint256) private mirrorIdTmp;
@@ -108,8 +85,7 @@ contract Bloom is FunctionsClient, ConfirmedOwner {
 
     mapping(uint256 profileId => PromotedPost[]) public promotedPosts;
 
-    address public constant lensHubAddress =
-        0xC1E77eE73403B8a7478884915aA599932A677870;
+    address public constant lensHubAddress = 0xC1E77eE73403B8a7478884915aA599932A677870;
 
     function setOpenActionContract(address contract_address) public onlyOwner {
         OPEN_ACTION_CONTRACT = contract_address;
@@ -147,53 +123,31 @@ contract Bloom is FunctionsClient, ConfirmedOwner {
         Promotion storage promotion = promotions[profileId][pubId];
 
         for (uint256 i = 0; promotion.promoterIds.length > i; i++) {
-            PromotedPost[] memory posts = promotedPosts[
-                promotion.promoterIds[i]
-            ];
+            PromotedPost[] memory posts = promotedPosts[promotion.promoterIds[i]];
             PromotedPost memory promotedPost;
 
-            for (uint256 j = 0; j < posts.length; j++) {
+            for (uint256 j = 0; j<posts.length; j++) {
                 if (posts[j].pubId == pubId) {
                     promotedPost = posts[j];
                 }
             }
 
             if (
-                bytes(
-                    lensHub
-                        .getPublication(
-                            promotedPost.profileId,
-                            promotedPost.mirrorId
-                        )
-                        .contentURI
-                ).length ==
-                0 &&
+                bytes(lensHub.getPublication(promotedPost.profileId,promotedPost.mirrorId).contentURI).length == 0 &&
                 !promotedPost.claimed &&
-                promotedPost.timestamp + promotion.bufferPeriod >
-                block.timestamp
+                promotedPost.timestamp + promotion.bufferPeriod > block.timestamp
             ) {
-                for (uint256 j = 0; j < promotion.promoterIds.length; j++) {
+                for (uint256 j = 0; j<promotion.promoterIds.length; j++) {
                     if (promotion.promoterIds[j] == promotion.promoterIds[i]) {
-                        uint256[] memory promoters = promotions[profileId][
-                            pubId
-                        ].promoterIds;
-                        promotions[profileId][pubId].promoterIds[j] = promoters[
-                            promoters.length - 1
-                        ];
+                        uint256[] memory promoters = promotions[profileId][pubId].promoterIds;
+                        promotions[profileId][pubId].promoterIds[j] = promoters[promoters.length - 1];
                         promotions[profileId][pubId].promoterIds.pop();
                     }
                 }
                 uint256 promoterId = promotion.promoterIds[i];
-                for (uint256 j = 0; j < promotedPosts[promoterId].length; j++) {
-                    if (
-                        promotedPosts[promoterId][j].pubId ==
-                        promotedPost.pubId &&
-                        promotedPosts[promoterId][j].profileId ==
-                        promotedPost.profileId
-                    ) {
-                        promotedPosts[promoterId][j] = promotedPosts[
-                            promoterId
-                        ][promotedPosts[promoterId].length - 1];
+                for (uint256 j = 0; j<promotedPosts[promoterId].length; j++) {
+                    if (promotedPosts[promoterId][j].pubId == promotedPost.pubId && promotedPosts[promoterId][j].profileId == promotedPost.profileId) {
+                        promotedPosts[promoterId][j] = promotedPosts[promoterId][promotedPosts[promoterId].length - 1];
                         promotedPosts[promoterId].pop();
                     }
                 }
@@ -201,7 +155,7 @@ contract Bloom is FunctionsClient, ConfirmedOwner {
         }
     }
 
-    function fulfillRequest(
+      function fulfillRequest(
         bytes32 requestId,
         bytes memory response,
         bytes memory err
@@ -219,10 +173,7 @@ contract Bloom is FunctionsClient, ConfirmedOwner {
             promotionPubId
         ];
 
-        require(
-            uint256(bytes32(response)) >= promotion.minFollowers,
-            "Your follower count is too low to promote this post."
-        );
+        require(uint256(bytes32(response)) >= promotion.minFollowers, "Your follower count is too low to promote this post.");
 
         if (
             promotion.budget >
@@ -240,7 +191,7 @@ contract Bloom is FunctionsClient, ConfirmedOwner {
             promotedPosts[promoterId].push(promotedPost);
         } else {
             filterInvalidPromotedPosts(promotionProfileId, promotionPubId);
-        }
+        }        
     }
 
     function isInUintArray(
@@ -265,63 +216,42 @@ contract Bloom is FunctionsClient, ConfirmedOwner {
             promotionPubId
         ];
 
-        require(
-            isInUintArray(promotion.promoterIds, promoterId),
-            "You have already promoted this post"
-        );
+        require(isInUintArray(promotion.promoterIds, promoterId), "You have already promoted this post");
+        require(promotion.budget != 0, "Promotion not active");
 
         string[] memory args = new string[](1);
         args[0] = string(abi.encodePacked("0x", Strings.toString(promoterId)));
-        getFollowers(
-            args,
-            promotionProfileId,
-            promotionPubId,
-            mirrorId,
-            promoterId
-        );
-
-        emit PostPromoted(profileId, pubId, mirrorId, promoterId);
+        getFollowers(args, promotionProfileId, promotionPubId, mirrorId, promoterId);
     }
+
+    function activatePromotion(uint256 publicationId, uint256 profileId) public payable {
+        require(promotions[profileId][publicationId].budget == 0, "Promotion already active");
+
+        promotions[profileId][publicationId].budget = msg.value;
+    }
+
 
     function createPromotion(
         address transactionExecutor,
         uint256 profileId,
         uint256 pubId,
-        uint256 budget,
         uint256 rewardPerMirror,
         uint256 minFollowers,
         uint256 bufferPeriod
-    ) external payable onlyOpenAction {
+    ) external onlyOpenAction {
         require(
             promotions[profileId][pubId].rewardPerMirror == 0,
             "Promotion already exists"
         );
-        (bool sent, bytes memory data) = transactionExecutor.call{
-            value: budget
-        }("");
-        require(sent, "Failed to send budget");
 
         uint256[] memory promoterIds;
 
-        Promotion memory promotion = Promotion(
-            budget,
+        promotions[profileId][pubId] = Promotion(
+            0,
             rewardPerMirror,
             minFollowers,
             bufferPeriod,
             promoterIds
-        );
-
-        promotions[profileId][pubId] = promotion;
-        promotionsByCreator[profileId] = promotion;
-        allPromotions.push(promotion);
-
-        emit PromotionCreated(
-            profileId,
-            pubId,
-            budget,
-            rewardPerMirror,
-            minFollowers,
-            bufferPeriod
         );
     }
 
@@ -355,25 +285,11 @@ contract Bloom is FunctionsClient, ConfirmedOwner {
 
         for (uint256 i; _promotedPosts.length > i; i++) {
             PromotedPost storage promotedPost = _promotedPosts[i];
-            Promotion storage promotion = promotions[profileId][
-                promotedPost.pubId
-            ];
+            Promotion storage promotion = promotions[profileId][promotedPost.pubId];
             if (
-                !promotedPost.claimed &&
-                bytes(
-                    lensHub
-                        .getPublication(
-                            promotedPost.profileId,
-                            promotedPost.mirrorId
-                        )
-                        .contentURI
-                ).length ==
-                0
+                !promotedPost.claimed && bytes(lensHub.getPublication(promotedPost.profileId, promotedPost.mirrorId).contentURI).length == 0
             ) {
-                if (
-                    promotedPost.timestamp + promotion.bufferPeriod <
-                    block.timestamp
-                ) {
+                if (promotedPost.timestamp + promotion.bufferPeriod < block.timestamp) {
                     Promotion memory _promotion = promotions[
                         promotedPost.profileId
                     ][promotedPost.pubId];
@@ -395,15 +311,5 @@ contract Bloom is FunctionsClient, ConfirmedOwner {
         uint256 pubId
     ) external view returns (Promotion memory) {
         return promotions[profileId][pubId];
-    }
-
-    function getPromotionsByCreatorId(
-        uint256 profileId
-    ) external view returns (Promotion[] memory) {
-        return promotionsByCreator[profileId];
-    }
-
-    function getAllPromotions() external view returns (Promotion[] memory) {
-        return allPromotions;
     }
 }
