@@ -9,14 +9,15 @@ import {Bloom} from "./Bloom.sol";
 import {ILensHub} from "./interfaces/ILensHub.sol";
 
 contract BloomOpenAction is HubRestricted, IPublicationActionModule {
-    // TODO: Add contract address
-    Bloom public bloom = Bloom();
+    Bloom public bloom;
     ILensHub public lensHub;
 
     constructor(
-        address lensHubProxyContract
+        address lensHubProxyContract,
+        address bloomContractAddress
     ) HubRestricted(lensHubProxyContract) {
         lensHub = ILensHub(lensHubProxyContract);
+        bloom = Bloom(bloomContractAddress);
     }
 
     function initializePublicationAction(
