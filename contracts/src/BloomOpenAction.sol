@@ -2,8 +2,8 @@
 
 pragma solidity ^0.8.18;
 
-import {HubRestricted} from "lens/HubRestricted.sol";
-import {Types} from "lens/Types.sol";
+import {HubRestricted} from "./HubRestricted.sol";
+import {Types} from "./Types.sol";
 import {IPublicationActionModule} from "./interfaces/IPublicationActionModule.sol";
 import {Bloom} from "./Bloom.sol";
 import {ILensHub} from "./interfaces/ILensHub.sol";
@@ -26,8 +26,12 @@ contract BloomOpenAction is HubRestricted, IPublicationActionModule {
         address transactionExecutor,
         bytes calldata data
     ) external override onlyHub returns (bytes memory) {
-        (uint256 budget, uint256 rewardPerMirror, uint256 minFollowers) = abi
-            .decode(data, (uint256, uint256, uint256));
+        (
+            uint256 budget,
+            uint256 rewardPerMirror,
+            uint256 minFollowers,
+            uint256 bufferPeriod
+        ) = abi.decode(data, (uint256, uint256, uint256, uint256));
 
         bloom.createPromotion(
             transactionExecutor,
@@ -35,7 +39,8 @@ contract BloomOpenAction is HubRestricted, IPublicationActionModule {
             pubId,
             budget,
             rewardPerMirror,
-            minFollowers
+            minFollowers,
+            bufferPeriod
         );
 
         return data;
@@ -44,20 +49,22 @@ contract BloomOpenAction is HubRestricted, IPublicationActionModule {
     function processPublicationAction(
         Types.ProcessActionParams calldata params
     ) external override onlyHub returns (bytes memory) {
-        lensHub.mirror(
-            params.actorProfileId,
-            "",
-            params.publicationActedProfileId,
-            params.publicationActedId,
-            []
-            [],
-            bytes(0)
+        uint256 mirrorId = lensHub.mirror(
+            abi.encode(
+                params.actorProfileId,
+                "",
+                params.publicationActedProfileId,
+                params.publicationActedId,
+                uint256[],
+                uint256[],
+                bytes()
+            )
         );
 
         bloom.promote(
             params.publicationActedProfileId,
             params.publicationActedId,
-            promoterId,
+            params.actorProfileId,
             mirrorId
         );
     }
